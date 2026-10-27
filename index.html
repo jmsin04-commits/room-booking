@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>강의실 예약</title>
+  <style>
+    :root {
+      --bg: #f5f6f8; --card: #ffffff; --text: #1d1f23; --muted: #6b7078; --line: #e2e4e8;
+      --primary: #2f6fed; --ok: #16a34a; --ok-bg: #e8f7ee; --bad: #dc2626; --bad-bg: #fdecec;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #121417; --card: #1c1f24; --text: #eef0f3; --muted: #9aa0a8; --line: #30343b;
+        --primary: #5b8cff; --ok: #4ade80; --ok-bg: #12301f; --bad: #f87171; --bad-bg: #3a1717;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 16px/1.5 -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+    }
+    main { max-width: 720px; margin: 0 auto; padding: 16px; }
+    h1 { font-size: 1.4rem; margin: 8px 0 4px; }
+    .sub { color: var(--muted); margin: 0 0 16px; font-size: 0.9rem; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+    .card h2 { font-size: 1.1rem; margin: 0 0 12px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+    label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+    input, select {
+      font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+      border-radius: 10px; padding: 10px; width: 100%;
+    }
+    button {
+      font: inherit; font-weight: 700; border: 0; border-radius: 10px; padding: 12px 16px;
+      background: var(--primary); color: #fff; cursor: pointer; margin-top: 12px; width: 100%;
+    }
+    button.secondary { background: transparent; color: var(--muted); border: 1px solid var(--line); font-weight: 500; }
+    button:disabled { opacity: 0.5; cursor: wait; }
+    .result {
+      margin-top: 12px; padding: 14px; border-radius: 12px; text-align: center;
+      font-size: 1.6rem; font-weight: 800; display: none;
+    }
+    .result.ok { display: block; background: var(--ok-bg); color: var(--ok); }
+    .result.bad { display: block; background: var(--bad-bg); color: var(--bad); }
+    .result small { display: block; font-size: 0.85rem; font-weight: 500; margin-top: 4px; color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); }
+    th { color: var(--muted); font-size: 0.85rem; font-weight: 600; }
+    .empty { color: var(--muted); text-align: center; padding: 16px; }
+    #status { padding: 12px 14px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); margin-bottom: 14px; font-size: 0.9rem; }
+    #status.err { color: var(--bad); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>🏫 강의실 예약</h1>
+  <p class="sub">예약 규칙은 모두 <code>solution.py</code>가 판단합니다. 이 페이지는 그 파일을 그대로 불러와 실행합니다.</p>
+  <div id="status">시스템(solution.py) 불러오는 중… 처음엔 10초쯤 걸릴 수 있어요.</div>
+
+  <section class="card">
+    <h2>예약하기</h2>
+    <form id="book-form" class="grid">
+      <label>강의실 <input name="room" list="rooms" value="A101" required></label>
+      <label>요일 <input name="day" list="days" value="월" required></label>
+      <label>시작(시) <input name="start" inputmode="decimal" value="10" required></label>
+      <label>끝(시) <input name="end" inputmode="decimal" value="12" required></label>
+      <label>이름 <input name="name" placeholder="예: 김철수" required></label>
+    </form>
+    <button type="submit" form="book-form" disabled>예약</button>
+    <div class="result" id="book-result" role="status"></div>
+  </section>
+
+  <section class="card">
+    <h2>예약 취소</h2>
+    <form id="cancel-form" class="grid">
+      <label>강의실 <input name="room" list="rooms" value="A101" required></label>
+      <label>요일 <input name="day" list="days" value="월" required></label>
+      <label>시작(시) <input name="start" inputmode="decimal" value="10" required></label>
+      <label>이름 <input name="name" placeholder="예약한 사람" required></label>
+    </form>
+    <button type="submit" form="cancel-form" disabled>취소</button>
+    <div class="result" id="cancel-result" role="status"></div>
+  </section>
+
+  <section class="card">
+    <h2>시간표</h2>
+    <form id="schedule-form" class="grid">
+      <label>강의실
+        <select name="room"><option>A101</option><option>A102</option><option>B201</option></select>
+      </label>
+      <label>요일
+        <select name="day"><option>월</option><option>화</option><option>수</option><option>목</option><option>금</option></select>
+      </label>
+    </form>
+    <div id="schedule"></div>
+  </section>
+
+  <button type="button" class="secondary" id="reset" disabled>모든 예약 지우고 처음부터</button>
+
+  <!-- 입력 칸 추천 목록 (다른 값도 직접 입력 가능 → 없는 강의실·요일이 거절되는지 확인용) -->
+  <datalist id="rooms"><option>A101</option><option>A102</option><option>B201</option></datalist>
+  <datalist id="days"><option>월</option><option>화</option><option>수</option><option>목</option><option>금</option></datalist>
+</main>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script>
+// 이 페이지에는 예약 규칙이 없습니다. 모든 판단은 solution.py의 RoomBooking이 합니다.
+// 화면은 입력값을 그대로 넘기고, 돌아온 True/False와 시간표를 보여주기만 합니다.
+const $ = (sel) => document.querySelector(sel);
+const LOG_KEY = "room-booking-log";
+let py = null;
+
+// 입력 글자를 파이썬 값으로만 바꿔서 넘김 (규칙 판단 아님): "10" → 10, "10.5" → 10.5, 그 외 → 글자 그대로
+const BRIDGE = `
+import json, solution
+
+def _value(text):
+    text = text.strip()
+    try:
+        return int(text)
+    except ValueError:
+        pass
+    try:
+        return float(text)
+    except ValueError:
+        return text
+
+def call(method, args_json):
+    args = json.loads(args_json)
+    if method == "book":
+        room, day, start, end, name = args
+        return rb.book(room, day, _value(start), _value(end), name)
+    if method == "cancel":
+        room, day, start, name = args
+        return rb.cancel(room, day, _value(start), name)
+    raise ValueError(method)
+
+def schedule(room, day):
+    return json.dumps([list(item) for item in rb.get_schedule(room, day)], ensure_ascii=False)
+
+def reset():
+    global rb
+    rb = solution.RoomBooking()
+
+reset()
+`;
+
+// 예약 기록(성공한 예약·취소)을 브라우저에 남겨 두고, 새로고침해도 solution.py로 다시 실행해 되살림
+function loadLog() { try { return JSON.parse(localStorage.getItem(LOG_KEY)) || []; } catch { return []; } }
+function saveLog(log) { try { localStorage.setItem(LOG_KEY, JSON.stringify(log)); } catch {} }
+
+function call(method, args) {
+  return py.globals.get("call")(method, JSON.stringify(args)) === true;
+}
+
+function showResult(el, ok, detail) {
+  el.className = "result " + (ok ? "ok" : "bad");
+  el.innerHTML = (ok ? "✅ 성공" : "❌ 실패") + `<small>${detail}</small>`;
+}
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function renderSchedule() {
+  const f = $("#schedule-form").elements;
+  const rows = JSON.parse(py.globals.get("schedule")(f.room.value, f.day.value));
+  $("#schedule").innerHTML = rows.length
+    ? `<table><thead><tr><th>시간</th><th>예약자</th></tr></thead><tbody>${rows.map(([s, e, n]) =>
+        `<tr><td>${esc(s)}시 ~ ${esc(e)}시</td><td>${esc(n)}</td></tr>`).join("")}</tbody></table>`
+    : `<div class="empty">${esc(f.room.value)} · ${esc(f.day.value)}요일 예약이 없어요.</div>`;
+}
+
+// 방금 다룬 강의실·요일이 시간표에 바로 보이도록 (목록에 있는 값일 때만)
+function focusSchedule(room, day) {
+  const f = $("#schedule-form").elements;
+  if ([...f.room.options].some((o) => o.value === room)) f.room.value = room;
+  if ([...f.day.options].some((o) => o.value === day)) f.day.value = day;
+  renderSchedule();
+}
+
+$("#book-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const f = e.target.elements;
+  const args = [f.room.value.trim(), f.day.value.trim(), f.start.value, f.end.value, f.name.value.trim()];
+  const ok = call("book", args);
+  if (ok) saveLog([...loadLog(), ["book", args]]);
+  showResult($("#book-result"), ok, `${esc(args[4])} · ${esc(args[0])} · ${esc(args[1])} · ${esc(args[2])}~${esc(args[3])}시`);
+  focusSchedule(args[0], args[1]);
+});
+
+$("#cancel-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const f = e.target.elements;
+  const args = [f.room.value.trim(), f.day.value.trim(), f.start.value, f.name.value.trim()];
+  const ok = call("cancel", args);
+  if (ok) saveLog([...loadLog(), ["cancel", args]]);
+  showResult($("#cancel-result"), ok, `${esc(args[3])} · ${esc(args[0])} · ${esc(args[1])} · ${esc(args[2])}시 예약 취소`);
+  focusSchedule(args[0], args[1]);
+});
+
+$("#schedule-form").addEventListener("change", renderSchedule);
+
+$("#reset").addEventListener("click", () => {
+  if (!confirm("모든 예약을 지우고 처음 상태로 돌아갈까요?")) return;
+  saveLog([]);
+  py.globals.get("reset")();
+  for (const el of document.querySelectorAll(".result")) el.className = "result";
+  renderSchedule();
+});
+
+(async () => {
+  try {
+    py = await loadPyodide();
+    // solution.py 파일을 그대로 받아서 import
+    const res = await fetch("solution.py", { cache: "no-store" });
+    if (!res.ok) throw new Error("solution.py 파일을 찾을 수 없어요.");
+    py.FS.writeFile("solution.py", await res.text());
+    py.runPython(BRIDGE);
+    for (const [method, args] of loadLog()) call(method, args); // 이전 예약 되살리기
+    renderSchedule();
+    for (const b of document.querySelectorAll("button")) b.disabled = false;
+    $("#status").textContent = "✅ solution.py 불러오기 완료 — 예약할 수 있어요.";
+  } catch (err) {
+    $("#status").className = "err";
+    $("#status").textContent = "시스템을 불러오지 못했어요: " + err.message;
+  }
+})();
+</script>
+</body>
+</html>
